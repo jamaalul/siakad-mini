@@ -1,0 +1,766 @@
+{
+    "info": {
+        "name": "siakad-mini",
+        "description": "Postman collection for SIAKAD Mini API (UTS PBE). Covers all 10 endpoints, roles (admin & mahasiswa), and standard status codes (200, 201, 204, 401, 403, 404, 409, 422).",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    ""
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "if (pm.response.code !== 204) {",
+                    "    pm.test(\"Content-Type is JSON\", function () {",
+                    "        pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+                    "    });",
+                    "    pm.test(\"Uniform response envelope (success + message)\", function () {",
+                    "        const b = pm.response.json();",
+                    "        pm.expect(b).to.have.property(\"success\");",
+                    "        pm.expect(b).to.have.property(\"message\");",
+                    "    });",
+                    "}"
+                ]
+            }
+        }
+    ],
+    "item": [
+        {
+            "name": "01 Auth",
+            "item": [
+                {
+                    "name": "01 Login Admin",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Access token returned\", function () {",
+                                    "    pm.expect(res.data.access_token).to.be.a(\"string\");",
+                                    "    pm.expect(res.data.user.role).to.eql(\"admin\");",
+                                    "});",
+                                    "pm.environment.set(\"admin_token\", res.data.access_token);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"{{admin_email}}\",\n    \"password\": \"{{admin_password}}\"\n}"
+                        },
+                        "url": "{{base_url}}/auth/login"
+                    }
+                },
+                {
+                    "name": "02 Login Mahasiswa",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Role is mahasiswa\", function () {",
+                                    "    pm.expect(res.data.access_token).to.be.a(\"string\");",
+                                    "    pm.expect(res.data.user.role).to.eql(\"mahasiswa\");",
+                                    "});",
+                                    "pm.environment.set(\"mhs_token\", res.data.access_token);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"{{mhs01_email}}\",\n    \"password\": \"{{mhs01_password}}\"\n}"
+                        },
+                        "url": "{{base_url}}/auth/login"
+                    }
+                },
+                {
+                    "name": "03 Get Me (Admin)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Profile role is admin\", function () {",
+                                    "    pm.expect(res.data.role).to.eql(\"admin\");",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/auth/me"
+                    }
+                },
+                {
+                    "name": "04 Get Me (Mahasiswa)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Mahasiswa profile contains student info\", function () {",
+                                    "    pm.expect(res.data.role).to.eql(\"mahasiswa\");",
+                                    "    pm.expect(res.data.student).to.have.property(\"nim\");",
+                                    "    pm.expect(res.data.student).to.have.property(\"nama\");",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{mhs_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/auth/me"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "02 Students",
+            "item": [
+                {
+                    "name": "01 List Students (Admin)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Pagination meta exists\", function () {",
+                                    "    pm.expect(res.data).to.be.an(\"array\");",
+                                    "    pm.expect(res.meta).to.have.property(\"current_page\");",
+                                    "    pm.expect(res.meta).to.have.property(\"total\");",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/students?page=1&per_page=10&sort=-ipk_terakhir",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "students"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "sort",
+                                    "value": "-ipk_terakhir"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "02 Create Student (Admin)",
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "const rand = Math.floor(100000 + Math.random() * 900000);",
+                                    "pm.variables.set(\"new_nim\", \"199999\" + rand);",
+                                    "pm.variables.set(\"new_email\", \"student\" + rand + \"@siakad.test\");"
+                                ]
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 201\", function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Student created\", function () {",
+                                    "    pm.expect(res.data).to.have.property(\"id\");",
+                                    "    pm.expect(res.data.nim).to.eql(pm.variables.get(\"new_nim\"));",
+                                    "});",
+                                    "pm.environment.set(\"created_student_id\", res.data.id);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"nim\": \"{{new_nim}}\",\n    \"nama\": \"Test Student Automation\",\n    \"email\": \"{{new_email}}\",\n    \"prodi\": \"Teknik Informatika\",\n    \"angkatan\": 2024,\n    \"ipk_terakhir\": 3.65\n}"
+                        },
+                        "url": "{{base_url}}/students"
+                    }
+                },
+                {
+                    "name": "03 Get Student Detail",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Contains detail, enrollments, and SKS limits\", function () {",
+                                    "    pm.expect(res.data).to.have.property(\"id\");",
+                                    "    pm.expect(res.data).to.have.property(\"enrollments\");",
+                                    "    pm.expect(res.data).to.have.property(\"total_sks\");",
+                                    "    pm.expect(res.data).to.have.property(\"batas_sks\");",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/students/{{created_student_id}}"
+                    }
+                },
+                {
+                    "name": "04 Update Student (Admin)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Nama updated successfully\", function () {",
+                                    "    pm.expect(res.data.nama).to.eql(\"Test Student Updated\");",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"nama\": \"Test Student Updated\",\n    \"prodi\": \"Sistem Informasi\",\n    \"angkatan\": 2024,\n    \"ipk_terakhir\": 3.80\n}"
+                        },
+                        "url": "{{base_url}}/students/{{created_student_id}}"
+                    }
+                },
+                {
+                    "name": "05 Delete Student (Soft Delete)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 204\", function () {",
+                                    "    pm.response.to.have.status(204);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "DELETE",
+                        "header": [],
+                        "url": "{{base_url}}/students/{{created_student_id}}"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "03 Courses",
+            "item": [
+                {
+                    "name": "01 List Courses",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Course items have real-time quota calculations\", function () {",
+                                    "    pm.expect(res.data).to.be.an(\"array\").that.is.not.empty;",
+                                    "    const c = res.data[0];",
+                                    "    pm.expect(c).to.have.property(\"id\");",
+                                    "    pm.expect(c).to.have.property(\"kode_mk\");",
+                                    "    pm.expect(c).to.have.property(\"terisi\");",
+                                    "    pm.expect(c).to.have.property(\"sisa_kuota\");",
+                                    "});",
+                                    "pm.environment.set(\"course_id\", res.data[0].id);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/courses"
+                    }
+                },
+                {
+                    "name": "02 List Available Courses",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 200\", function () {",
+                                    "    pm.response.to.have.status(200);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"All returned courses have available seats\", function () {",
+                                    "    res.data.forEach(c => {",
+                                    "        pm.expect(c.sisa_kuota).to.be.above(0);",
+                                    "    });",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{mhs_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/courses?available=true&semester=1",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "courses"
+                            ],
+                            "query": [
+                                {
+                                    "key": "available",
+                                    "value": "true"
+                                },
+                                {
+                                    "key": "semester",
+                                    "value": "1"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "04 Enrollments",
+            "item": [
+                {
+                    "name": "01 Enroll Course (KRS)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 201\", function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Enrollment created\", function () {",
+                                    "    pm.expect(res.data).to.have.property(\"id\");",
+                                    "    pm.expect(res.data).to.have.property(\"course_id\");",
+                                    "});",
+                                    "pm.environment.set(\"enrollment_id\", res.data.id);"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{mhs_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"course_id\": {{course_id}},\n    \"tahun_akademik\": \"2026/2027-Ganjil\"\n}"
+                        },
+                        "url": "{{base_url}}/enrollments"
+                    }
+                },
+                {
+                    "name": "02 Duplicate Enrollment (409 Conflict)",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 409 Conflict\", function () {",
+                                    "    pm.response.to.have.status(409);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{mhs_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"course_id\": {{course_id}},\n    \"tahun_akademik\": \"2026/2027-Ganjil\"\n}"
+                        },
+                        "url": "{{base_url}}/enrollments"
+                    }
+                },
+                {
+                    "name": "03 Cancel Enrollment",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 204\", function () {",
+                                    "    pm.response.to.have.status(204);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{mhs_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "DELETE",
+                        "header": [],
+                        "url": "{{base_url}}/enrollments/{{enrollment_id}}"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "05 Authorization & Validation",
+            "item": [
+                {
+                    "name": "01 Forbidden - Mahasiswa calls GET /students",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 403 Forbidden\", function () {",
+                                    "    pm.response.to.have.status(403);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{mhs_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/students"
+                    }
+                },
+                {
+                    "name": "02 Unauthorized - Missing Bearer Token",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 401 Unauthorized\", function () {",
+                                    "    pm.response.to.have.status(401);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/auth/me"
+                    }
+                },
+                {
+                    "name": "03 Validation Error - Invalid Login Payload",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
+                                    "    pm.response.to.have.status(422);",
+                                    "});",
+                                    "const res = pm.response.json();",
+                                    "pm.test(\"Errors field populated\", function () {",
+                                    "    pm.expect(res).to.have.property(\"errors\");",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"not-an-email\",\n    \"password\": \"short\"\n}"
+                        },
+                        "url": "{{base_url}}/auth/login"
+                    }
+                },
+                {
+                    "name": "04 Not Found - Route Does Not Exist",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "type": "text/javascript",
+                                "exec": [
+                                    "pm.test(\"Status code is 404 Not Found\", function () {",
+                                    "    pm.response.to.have.status(404);",
+                                    "});"
+                                ]
+                            }
+                        }
+                    ],
+                    "request": {
+                        "auth": {
+                            "type": "bearer",
+                            "bearer": [
+                                {
+                                    "key": "token",
+                                    "value": "{{admin_token}}",
+                                    "type": "string"
+                                }
+                            ]
+                        },
+                        "method": "GET",
+                        "header": [],
+                        "url": "{{base_url}}/non-existent-endpoint"
+                    }
+                }
+            ]
+        }
+    ]
+}
