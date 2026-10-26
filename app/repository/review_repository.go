@@ -31,6 +31,8 @@ type ReviewRepository interface {
 	Create(ctx context.Context, r model.Review) (model.Review, error)
 	FindByID(ctx context.Context, id string) (model.Review, error)
 	FindByCourse(ctx context.Context, q model.ReviewQuery) ([]model.Review, error)
+	UpdateOwn(ctx context.Context, id string, studentID int, req model.UpdateReviewRequest) (model.Review, error)
+	Delete(ctx context.Context, id string, studentID int, anyOwner bool) error
 }
 
 // reviewDocument adalah bentuk ulasan SEBAGAIMANA TERSIMPAN di MongoDB.
@@ -200,4 +202,71 @@ func (r *reviewMongoRepository) FindByCourse(ctx context.Context, q model.Review
 		result = append(result, d.toModel())
 	}
 	return result, nil
+}
+
+// UpdateOwn mengubah ulasan HANYA bila pemanggil adalah pemiliknya.
+// Pemeriksaan kepemilikan ada di dalam filter, bukan diperiksa lebih dulu lalu
+// di-update: satu operasi, tanpa celah di antaranya.
+func (r *reviewMongoRepository) UpdateOwn(ctx context.Context, id string, studentID int, req model.UpdateReviewRequest) (model.Review, error) {
+	oid, err := parseID(id)
+	if err != nil {
+		return model.Review{}, err
+	}
+
+	set := bson.M{"updated_at": now()}
+	if req.Rating != nil {
+		set["rating"] = *req.Rating
+	}
+	if req.Comment != nil {
+		set["comment"] = *req.Comment
+	}
+	if req.Tags != nil {
+		set["tags"] = *req.Tags
+	}
+
+	var doc reviewDocument
+	err = r.coll.FindOneAndUpdate(ctx,
+		bson.M{"_id": oid, "student_id": studentID},
+		bson.M{"$set": set},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	).Decode(&doc)
+	if err == nil {
+		return doc.toModel(), nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return model.Review{}, fmt.Errorf("mengubah ulasan: %w", err)
+	}
+	return model.Review{}, r.whyNoMatch(ctx, oid)
+}
+
+// whyNoMatch membedakan "ulasannya tidak ada" dari "ada, tetapi bukan milik
+// Anda" setelah sebuah operasi bersyarat tidak mengenai dokumen.
+func (r *reviewMongoRepository) whyNoMatch(ctx context.Context, oid bson.ObjectID) error {
+	count, err := r.coll.CountDocuments(ctx, bson.M{"_id": oid})
+	if err != nil {
+		return fmt.Errorf("memeriksa ulasan: %w", err)
+	}
+	if count == 0 {
+		return ErrNotFound
+	}
+	return ErrNotOwner
+}
+
+func (r *reviewMongoRepository) Delete(ctx context.Context, id string, studentID int, anyOwner bool) error {
+	oid, err := parseID(id)
+	if err != nil {
+		return err
+	}
+	filter := bson.M{"_id": oid}
+	if !anyOwner {
+		filter["student_id"] = studentID
+	}
+	res, err := r.coll.DeleteOne(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("menghapus ulasan: %w", err)
+	}
+	if res.DeletedCount == 0 {
+		return r.whyNoMatch(ctx, oid)
+	}
+	return nil
 }
