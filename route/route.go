@@ -23,6 +23,7 @@ type Dependencies struct {
 	StudentService    *service.StudentService
 	CourseService     *service.CourseService
 	EnrollmentService *service.EnrollmentService
+	ReviewService     *service.ReviewService
 }
 
 func Register(app *fiber.App, deps Dependencies) {
@@ -88,6 +89,22 @@ func Register(app *fiber.App, deps Dependencies) {
 	// -------------------------------------------------------------------------
 	courses := api.Group("/courses", middleware.RequireAuth(deps.JWT))
 	courses.Get("/", deps.CourseService.List)
+	courses.Get("/:id/reviews", deps.ReviewService.ListByCourse)
+	courses.Get("/:id/reviews/summary", deps.ReviewService.GetSummary)
+	courses.Post("/:id/reviews",
+		middleware.RequireJSON,
+		middleware.RequireRole(string(model.RoleMahasiswa)),
+		deps.ReviewService.Create)
+
+	// -------------------------------------------------------------------------
+	// Reviews (/api/v1/reviews)
+	// -------------------------------------------------------------------------
+	reviews := api.Group("/reviews", middleware.RequireAuth(deps.JWT))
+	reviews.Get("/:id", deps.ReviewService.Get)
+	reviews.Patch("/:id", middleware.RequireJSON, middleware.RequireRole(string(model.RoleMahasiswa)), deps.ReviewService.Update)
+	reviews.Delete("/:id", deps.ReviewService.Delete) // pemilik atau admin, diputuskan di service
+	reviews.Post("/:id/replies", middleware.RequireJSON, middleware.RequireRole(string(model.RoleMahasiswa)), deps.ReviewService.AddReply)
+	reviews.Post("/:id/helpful", middleware.RequireRole(string(model.RoleMahasiswa)), deps.ReviewService.MarkHelpful)
 
 	// -------------------------------------------------------------------------
 	// Enrollments (/api/v1/enrollments)

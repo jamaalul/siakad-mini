@@ -44,12 +44,18 @@ func main() {
 		defer cancel()
 		_ = mongoClient.Disconnect(ctx)
 	}()
+	mongoDB := mongoClient.Database(config.GetEnv("MONGO_DATABASE", "siakad_mini"))
 
 	// 4. Instansiasi repositories
 	userRepo := repository.NewUserRepository(pool)
 	studentRepo := repository.NewStudentRepository(pool)
 	courseRepo := repository.NewCourseRepository(pool)
 	enrollmentRepo := repository.NewEnrollmentRepository(pool)
+	reviewRepo := repository.NewReviewRepository(mongoDB)
+	if err := reviewRepo.EnsureIndexes(context.Background()); err != nil {
+		logger.Error("gagal membuat index MongoDB", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 
 	// 5. Inisialisasi JWT Manager
 	jwtSecret := config.GetEnv("JWT_SECRET", "super-secret-key-change-in-production")
@@ -65,6 +71,7 @@ func main() {
 	studentService := service.NewStudentService(studentRepo, userRepo, enrollmentRepo)
 	courseService := service.NewCourseService(courseRepo)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepo, studentRepo, courseRepo)
+	reviewService := service.NewReviewService(reviewRepo, courseRepo, studentRepo)
 
 	// 10. Pasang dependensi dan buat Fiber app
 	deps := route.Dependencies{
@@ -75,6 +82,7 @@ func main() {
 		StudentService:    studentService,
 		CourseService:     courseService,
 		EnrollmentService: enrollmentService,
+		ReviewService:     reviewService,
 	}
 	app := config.NewApp(logger, deps)
 
