@@ -122,7 +122,87 @@ func (s *PortfolioService) Upsert(c *fiber.Ctx) error {
 	return portfolioJSON(c, fiber.StatusOK, "portofolio berhasil disimpan", portfolio)
 }
 
+// ---------- POST /students/:id/portfolio/projects ----------
+func (s *PortfolioService) AddProject(c *fiber.Ctx) error {
+	ctx, cancel := portfolioCtx(c)
+	defer cancel()
+
+	studentID, _ := c.ParamsInt("id", 0)
+	if studentID < 1 {
+		return helper.BadRequest("id mahasiswa harus berupa angka positif")
+	}
+
+	// Otorisasi: hanya pemilik atau admin
+	authUser, ok := helper.CurrentUser(c)
+	if !ok {
+		return helper.Forbidden("belum terautentikasi")
+	}
+	isAdmin := string(authUser.Role) == string(model.RoleAdmin)
+	if !isAdmin {
+		myID, _, err := s.currentStudent(ctx, c)
+		if err != nil {
+			return err
+		}
+		if myID != studentID {
+			return helper.Forbidden("hanya boleh menambah proyek ke portofolio sendiri")
+		}
+	}
+
+	var req model.AddProjectRequest
+	if err := c.BodyParser(&req); err != nil {
+		return helper.BadRequest("body harus berupa JSON yang valid")
+	}
+	req.Title = strings.TrimSpace(req.Title)
+	req.URL = strings.TrimSpace(req.URL)
+	req.Technologies = NormalizeTags(req.Technologies)
+	if errs := helper.ValidateStruct(req); errs != nil {
+		return helper.Validation(errs)
+	}
+
+	portfolio, err := s.portfolios.AddProject(ctx, studentID, model.Project{
+		Title: req.Title, Technologies: req.Technologies, URL: req.URL, Year: req.Year,
+	})
+	if err != nil {
+		return translatePortfolioError(err)
+	}
+	return portfolioJSON(c, fiber.StatusCreated, "proyek berhasil ditambahkan", portfolio)
+}
+
+// ---------- DELETE /students/:id/portfolio/projects/:projectId ----------
+func (s *PortfolioService) DeleteProject(c *fiber.Ctx) error {
+	ctx, cancel := portfolioCtx(c)
+	defer cancel()
+
+	studentID, _ := c.ParamsInt("id", 0)
+	if studentID < 1 {
+		return helper.BadRequest("id mahasiswa harus berupa angka positif")
+	}
+	projectID := c.Params("projectId")
+
+	// Otorisasi: hanya pemilik atau admin
+	authUser, ok := helper.CurrentUser(c)
+	if !ok {
+		return helper.Forbidden("belum terautentikasi")
+	}
+	isAdmin := string(authUser.Role) == string(model.RoleAdmin)
+	if !isAdmin {
+		myID, _, err := s.currentStudent(ctx, c)
+		if err != nil {
+			return err
+		}
+		if myID != studentID {
+			return helper.Forbidden("hanya boleh menghapus proyek dari portofolio sendiri")
+		}
+	}
+
+	if err := s.portfolios.DeleteProject(ctx, studentID, projectID); err != nil {
+		return translatePortfolioError(err)
+	}
+	return c.SendStatus(fiber.StatusNoContent)
+}
+
 func translatePortfolioError(err error) error {
+
 	var appErr *helper.AppError
 	if errors.As(err, &appErr) {
 		return err

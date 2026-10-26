@@ -23,6 +23,10 @@ const MaxProjectsPerPortfolio = 20
 
 type PortfolioRepository interface {
 	EnsureIndexes(ctx context.Context) error
+	FindByStudent(ctx context.Context, studentID int) (model.Portfolio, error)
+	Upsert(ctx context.Context, studentID int, req model.PutPortfolioRequest) (model.Portfolio, error)
+	AddProject(ctx context.Context, studentID int, proj model.Project) (model.Portfolio, error)
+	DeleteProject(ctx context.Context, studentID int, projectID string) error
 }
 
 type portfolioDocument struct {
@@ -100,6 +104,101 @@ func (r *portfolioMongoRepository) EnsureIndexes(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("membuat index student_portfolios: %w", err)
+	}
+	return nil
+}
+
+// FindByStudent mengambil dokumen portofolio mahasiswa berdasarkan student_id.
+func (r *portfolioMongoRepository) FindByStudent(ctx context.Context, studentID int) (model.Portfolio, error) {
+	var doc portfolioDocument
+	if err := r.coll.FindOne(ctx, bson.M{"student_id": studentID}).Decode(&doc); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return model.Portfolio{}, ErrNotFound
+		}
+		return model.Portfolio{}, fmt.Errorf("mengambil portofolio: %w", err)
+	}
+	return doc.toModel(), nil
+}
+
+// Upsert membuat atau memperbarui profil portofolio mahasiswa.
+// Digunakan $set untuk field yang diperbarui dan $setOnInsert untuk field inisialisasi awal.
+func (r *portfolioMongoRepository) Upsert(ctx context.Context, studentID int, req model.PutPortfolioRequest) (model.Portfolio, error) {
+	t := now()
+	update := bson.M{
+		"$set": bson.M{
+			"headline":   req.Headline,
+			"bio":        req.Bio,
+			"updated_at": t,
+		},
+		"$setOnInsert": bson.M{
+			"student_id":   studentID,
+			"projects":     []projectDocument{},
+			"certificates": []certificateDocument{},
+			"created_at":   t,
+		},
+	}
+	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
+	var doc portfolioDocument
+	if err := r.coll.FindOneAndUpdate(ctx, bson.M{"student_id": studentID}, update, opts).Decode(&doc); err != nil {
+		return model.Portfolio{}, fmt.Errorf("menyimpan portofolio: %w", err)
+	}
+	return doc.toModel(), nil
+}
+
+// AddProject menambahkan satu proyek ke array projects secara atomik.
+// Filter "projects.19" memastikan array belum berisi 20 elemen sebelum push dilakukan.
+func (r *portfolioMongoRepository) AddProject(ctx context.Context, studentID int, proj model.Project) (model.Portfolio, error) {
+	doc := projectDocument{
+		ID:           bson.NewObjectID(),
+		Title:        proj.Title,
+		Technologies: proj.Technologies,
+		URL:          proj.URL,
+		Year:         proj.Year,
+	}
+
+	limitField := fmt.Sprintf("projects.%d", MaxProjectsPerPortfolio-1)
+	var updated portfolioDocument
+	err := r.coll.FindOneAndUpdate(ctx,
+		bson.M{"student_id": studentID, limitField: bson.M{"$exists": false}},
+		bson.M{"$push": bson.M{"projects": doc}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	).Decode(&updated)
+	if err == nil {
+		return updated.toModel(), nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return model.Portfolio{}, fmt.Errorf("menambah proyek: %w", err)
+	}
+
+	// Bedakan "portofolio tidak ada" vs "batas tercapai"
+	count, cerr := r.coll.CountDocuments(ctx, bson.M{"student_id": studentID})
+	if cerr != nil {
+		return model.Portfolio{}, fmt.Errorf("memeriksa portofolio: %w", cerr)
+	}
+	if count == 0 {
+		return model.Portfolio{}, ErrNotFound
+	}
+	return model.Portfolio{}, ErrProjectLimit
+}
+
+// DeleteProject menghapus satu proyek dari array projects menggunakan $pull.
+func (r *portfolioMongoRepository) DeleteProject(ctx context.Context, studentID int, projectID string) error {
+	oid, err := parseID(projectID)
+	if err != nil {
+		return ErrInvalidID
+	}
+	res, err := r.coll.UpdateOne(ctx,
+		bson.M{"student_id": studentID},
+		bson.M{"$pull": bson.M{"projects": bson.M{"_id": oid}}},
+	)
+	if err != nil {
+		return fmt.Errorf("menghapus proyek: %w", err)
+	}
+	if res.MatchedCount == 0 {
+		return ErrNotFound
+	}
+	if res.ModifiedCount == 0 {
+		return ErrProjectNotFound
 	}
 	return nil
 }

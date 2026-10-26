@@ -86,6 +86,8 @@ func Register(app *fiber.App, deps Dependencies) {
 	students.Delete("/:id", middleware.RequireRole(string(model.RoleAdmin)), deps.StudentService.Delete)
 	students.Get("/:id/portfolio", deps.PortfolioService.Get)
 	students.Put("/:id/portfolio", middleware.RequireJSON, deps.PortfolioService.Upsert)
+	students.Post("/:id/portfolio/projects", middleware.RequireJSON, deps.PortfolioService.AddProject)
+	students.Delete("/:id/portfolio/projects/:projectId", deps.PortfolioService.DeleteProject)
 
 	// -------------------------------------------------------------------------
 	// Courses (/api/v1/courses)
