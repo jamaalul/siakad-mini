@@ -33,6 +33,18 @@ func main() {
 	}
 	defer pool.Close()
 
+	// 3b. Hubungkan MongoDB client
+	mongoClient, err := database.NewMongoClient(context.Background())
+	if err != nil {
+		logger.Error("gagal terhubung ke MongoDB", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = mongoClient.Disconnect(ctx)
+	}()
+
 	// 4. Instansiasi repositories
 	userRepo := repository.NewUserRepository(pool)
 	studentRepo := repository.NewStudentRepository(pool)
@@ -57,6 +69,7 @@ func main() {
 	// 10. Pasang dependensi dan buat Fiber app
 	deps := route.Dependencies{
 		Pool:              pool,
+		MongoClient:       mongoClient,
 		JWT:               jwtManager,
 		AuthService:       authService,
 		StudentService:    studentService,

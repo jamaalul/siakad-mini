@@ -1,8 +1,13 @@
 package route
 
 import (
+	"context"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 
 	"siakad-mini/app/model"
 	"siakad-mini/app/service"
@@ -12,6 +17,7 @@ import (
 
 type Dependencies struct {
 	Pool              *pgxpool.Pool
+	MongoClient       *mongo.Client
 	JWT               *helper.JWTManager
 	AuthService       *service.AuthService
 	StudentService    *service.StudentService
@@ -20,6 +26,44 @@ type Dependencies struct {
 }
 
 func Register(app *fiber.App, deps Dependencies) {
+	// Endpoint Health Check dua database
+	app.Get("/health", func(c *fiber.Ctx) error {
+		ctx, cancel := context.WithTimeout(c.Context(), 3*time.Second)
+		defer cancel()
+
+		pgStatus := "ok"
+		if err := deps.Pool.Ping(ctx); err != nil {
+			pgStatus = "down: " + err.Error()
+		}
+
+		mongoStatus := "ok"
+		if deps.MongoClient == nil {
+			mongoStatus = "down: client belum diinisialisasi"
+		} else if err := deps.MongoClient.Ping(ctx, readpref.Primary()); err != nil {
+			mongoStatus = "down: " + err.Error()
+		}
+
+		if pgStatus != "ok" || mongoStatus != "ok" {
+			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+				"success": false,
+				"message": "satu atau lebih layanan database tidak tersedia",
+				"data": fiber.Map{
+					"postgres": pgStatus,
+					"mongodb":  mongoStatus,
+				},
+			})
+		}
+
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"success": true,
+			"message": "server, PostgreSQL, dan MongoDB berjalan normal",
+			"data": fiber.Map{
+				"postgres": "ok",
+				"mongodb":  "ok",
+			},
+		})
+	})
+
 	api := app.Group("/api/v1")
 
 	// -------------------------------------------------------------------------
