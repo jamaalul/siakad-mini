@@ -24,6 +24,7 @@ type Dependencies struct {
 	CourseService     *service.CourseService
 	EnrollmentService *service.EnrollmentService
 	ReviewService     *service.ReviewService
+	PortfolioService  *service.PortfolioService
 }
 
 func Register(app *fiber.App, deps Dependencies) {
@@ -83,6 +84,8 @@ func Register(app *fiber.App, deps Dependencies) {
 	students.Get("/:id", deps.StudentService.Get)
 	students.Put("/:id", middleware.RequireJSON, middleware.RequireRole(string(model.RoleAdmin)), deps.StudentService.Update)
 	students.Delete("/:id", middleware.RequireRole(string(model.RoleAdmin)), deps.StudentService.Delete)
+	students.Get("/:id/portfolio", deps.PortfolioService.Get)
+	students.Put("/:id/portfolio", middleware.RequireJSON, deps.PortfolioService.Upsert)
 
 	// -------------------------------------------------------------------------
 	// Courses (/api/v1/courses)

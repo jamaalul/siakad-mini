@@ -61,7 +61,6 @@ func main() {
 		logger.Error("gagal membuat index MongoDB portofolio", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
-	_ = portfolioRepo
 
 	// 5. Inisialisasi JWT Manager
 	jwtSecret := config.GetEnv("JWT_SECRET", "super-secret-key-change-in-production")
@@ -78,6 +77,7 @@ func main() {
 	courseService := service.NewCourseService(courseRepo)
 	enrollmentService := service.NewEnrollmentService(enrollmentRepo, studentRepo, courseRepo)
 	reviewService := service.NewReviewService(reviewRepo, courseRepo, studentRepo)
+	portfolioService := service.NewPortfolioService(portfolioRepo, studentRepo)
 
 	// 10. Pasang dependensi dan buat Fiber app
 	deps := route.Dependencies{
@@ -89,6 +89,7 @@ func main() {
 		CourseService:     courseService,
 		EnrollmentService: enrollmentService,
 		ReviewService:     reviewService,
+		PortfolioService:  portfolioService,
 	}
 	app := config.NewApp(logger, deps)
 
