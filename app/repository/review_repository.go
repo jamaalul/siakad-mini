@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -33,6 +34,8 @@ type ReviewRepository interface {
 	FindByCourse(ctx context.Context, q model.ReviewQuery) ([]model.Review, error)
 	UpdateOwn(ctx context.Context, id string, studentID int, req model.UpdateReviewRequest) (model.Review, error)
 	Delete(ctx context.Context, id string, studentID int, anyOwner bool) error
+	AddReply(ctx context.Context, id string, reply model.Reply) (model.Review, error)
+	MarkHelpful(ctx context.Context, id string, studentID int) (model.Review, error)
 }
 
 // reviewDocument adalah bentuk ulasan SEBAGAIMANA TERSIMPAN di MongoDB.
@@ -269,4 +272,91 @@ func (r *reviewMongoRepository) Delete(ctx context.Context, id string, studentID
 		return r.whyNoMatch(ctx, oid)
 	}
 	return nil
+}
+
+// AddReply menambahkan satu balasan ke array replies.
+//
+// Syarat "replies.49 tidak ada" berarti array belum berisi 50 elemen (indeks
+// 0 sampai 49). Pemeriksaan batas dan penambahan terjadi dalam satu operasi,
+// sehingga dua balasan serentak tidak dapat sama-sama lolos ketika tinggal
+// satu tempat tersisa.
+func (r *reviewMongoRepository) AddReply(ctx context.Context, id string, reply model.Reply) (model.Review, error) {
+	oid, err := parseID(id)
+	if err != nil {
+		return model.Review{}, err
+	}
+	doc := replyDocument{
+		ID: bson.NewObjectID(), StudentID: reply.StudentID, StudentName: reply.StudentName,
+		Body: reply.Body, CreatedAt: now(),
+	}
+
+	limitField := "replies." + strconv.Itoa(MaxRepliesPerReview-1)
+	var updated reviewDocument
+	err = r.coll.FindOneAndUpdate(ctx,
+		bson.M{"_id": oid, limitField: bson.M{"$exists": false}},
+		bson.M{"$push": bson.M{"replies": doc}},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	).Decode(&updated)
+	if err == nil {
+		return updated.toModel(), nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return model.Review{}, fmt.Errorf("menambah balasan: %w", err)
+	}
+
+	count, err := r.coll.CountDocuments(ctx, bson.M{"_id": oid})
+	if err != nil {
+		return model.Review{}, fmt.Errorf("memeriksa ulasan: %w", err)
+	}
+	if count == 0 {
+		return model.Review{}, ErrNotFound
+	}
+	return model.Review{}, ErrReplyLimit
+}
+
+// MarkHelpful menandai ulasan sebagai membantu, maksimal sekali per orang.
+//
+// Tiga syarat di dalam filter: ulasannya ada, bukan milik pemberi nilai, dan
+// pemberi nilai belum tercatat di helpful_by. Bila ketiganya terpenuhi,
+// $addToSet mencatat pemberi nilai dan $inc menambah hitungan, dalam satu
+// operasi atomik. Mengirim request yang sama dua kali tidak menambah hitungan
+// dua kali.
+func (r *reviewMongoRepository) MarkHelpful(ctx context.Context, id string, studentID int) (model.Review, error) {
+	oid, err := parseID(id)
+	if err != nil {
+		return model.Review{}, err
+	}
+
+	var updated reviewDocument
+	err = r.coll.FindOneAndUpdate(ctx,
+		bson.M{
+			"_id":        oid,
+			"student_id": bson.M{"$ne": studentID},
+			"helpful_by": bson.M{"$ne": studentID},
+		},
+		bson.M{
+			"$addToSet": bson.M{"helpful_by": studentID},
+			"$inc":      bson.M{"helpful_count": 1},
+		},
+		options.FindOneAndUpdate().SetReturnDocument(options.After),
+	).Decode(&updated)
+	if err == nil {
+		return updated.toModel(), nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return model.Review{}, fmt.Errorf("menilai ulasan: %w", err)
+	}
+
+	// Tidak ada dokumen yang cocok. Cari tahu syarat mana yang gagal.
+	var current reviewDocument
+	if err := r.coll.FindOne(ctx, bson.M{"_id": oid}).Decode(&current); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return model.Review{}, ErrNotFound
+		}
+		return model.Review{}, fmt.Errorf("memeriksa ulasan: %w", err)
+	}
+	if current.StudentID == studentID {
+		return model.Review{}, ErrOwnReview
+	}
+	return model.Review{}, ErrAlreadyVoted
 }
