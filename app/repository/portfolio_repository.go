@@ -27,6 +27,7 @@ type PortfolioRepository interface {
 	Upsert(ctx context.Context, studentID int, req model.PutPortfolioRequest) (model.Portfolio, error)
 	AddProject(ctx context.Context, studentID int, proj model.Project) (model.Portfolio, error)
 	DeleteProject(ctx context.Context, studentID int, projectID string) error
+	TechStats(ctx context.Context) ([]model.TechCount, error)
 }
 
 type portfolioDocument struct {
@@ -201,4 +202,40 @@ func (r *portfolioMongoRepository) DeleteProject(ctx context.Context, studentID 
 		return ErrProjectNotFound
 	}
 	return nil
+}
+
+// TechStats menghitung 10 teknologi terpopuler dari seluruh portofolio mahasiswa.
+// Dua $unwind diperlukan: pertama untuk membuka array projects, lalu untuk
+// membuka sub-array projects.technologies.
+func (r *portfolioMongoRepository) TechStats(ctx context.Context) ([]model.TechCount, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$unwind", Value: "$projects"}},
+		{{Key: "$unwind", Value: "$projects.technologies"}},
+		{{Key: "$group", Value: bson.M{
+			"_id":   "$projects.technologies",
+			"total": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "total", Value: -1}, {Key: "_id", Value: 1}}}},
+		{{Key: "$limit", Value: 10}},
+	}
+
+	cursor, err := r.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("statistik teknologi: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var raw []struct {
+		Tech  string `bson:"_id"`
+		Total int    `bson:"total"`
+	}
+	if err := cursor.All(ctx, &raw); err != nil {
+		return nil, fmt.Errorf("membaca statistik teknologi: %w", err)
+	}
+
+	result := make([]model.TechCount, 0, len(raw))
+	for _, r := range raw {
+		result = append(result, model.TechCount{Technology: r.Tech, Total: r.Total})
+	}
+	return result, nil
 }

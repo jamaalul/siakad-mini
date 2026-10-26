@@ -201,6 +201,18 @@ func (s *PortfolioService) DeleteProject(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
+// ---------- GET /portfolios/stats/technologies ----------
+func (s *PortfolioService) TechStats(c *fiber.Ctx) error {
+	ctx, cancel := portfolioCtx(c)
+	defer cancel()
+
+	stats, err := s.portfolios.TechStats(ctx)
+	if err != nil {
+		return helper.Internal(err)
+	}
+	return portfolioJSON(c, fiber.StatusOK, "statistik teknologi berhasil diambil", stats)
+}
+
 func translatePortfolioError(err error) error {
 
 	var appErr *helper.AppError

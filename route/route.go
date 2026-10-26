@@ -112,6 +112,12 @@ func Register(app *fiber.App, deps Dependencies) {
 	reviews.Post("/:id/helpful", middleware.RequireRole(string(model.RoleMahasiswa)), deps.ReviewService.MarkHelpful)
 
 	// -------------------------------------------------------------------------
+	// Portfolios stats (/api/v1/portfolios)
+	// -------------------------------------------------------------------------
+	portfolios := api.Group("/portfolios", middleware.RequireAuth(deps.JWT))
+	portfolios.Get("/stats/technologies", deps.PortfolioService.TechStats)
+
+	// -------------------------------------------------------------------------
 	// Enrollments (/api/v1/enrollments)
 	// -------------------------------------------------------------------------
 	enrollments := api.Group("/enrollments", middleware.RequireAuth(deps.JWT))
