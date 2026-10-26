@@ -56,6 +56,12 @@ func main() {
 		logger.Error("gagal membuat index MongoDB", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+	portfolioRepo := repository.NewPortfolioRepository(mongoDB)
+	if err := portfolioRepo.EnsureIndexes(context.Background()); err != nil {
+		logger.Error("gagal membuat index MongoDB portofolio", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	_ = portfolioRepo
 
 	// 5. Inisialisasi JWT Manager
 	jwtSecret := config.GetEnv("JWT_SECRET", "super-secret-key-change-in-production")
