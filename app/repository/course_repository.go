@@ -14,6 +14,7 @@ import (
 type CourseRepository interface {
 	FindAllWithQuota(ctx context.Context, q model.CourseListQuery) ([]model.CourseWithQuota, error)
 	FindByID(ctx context.Context, id int) (model.Course, error)
+	IsEnrolled(ctx context.Context, courseID, studentID int) (bool, error)
 }
 
 type coursePostgresRepository struct {
@@ -97,4 +98,17 @@ func (r *coursePostgresRepository) FindByID(
 		return model.Course{}, fmt.Errorf("mengambil mata kuliah by id: %w", err)
 	}
 	return c, nil
+}
+
+// IsEnrolled dipakai layanan ulasan (MongoDB) untuk mengetahui apakah seorang
+// mahasiswa terdaftar di sebuah kelas.
+func (r *coursePostgresRepository) IsEnrolled(ctx context.Context, courseID, studentID int) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM enrollments WHERE course_id = $1 AND student_id = $2)`,
+		courseID, studentID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("memeriksa pendaftaran: %w", err)
+	}
+	return exists, nil
 }
